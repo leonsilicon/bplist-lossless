@@ -1,15 +1,17 @@
+import { toHex } from "../utils/bytes.js";
+
 const UID_BRAND = Symbol.for('plist.UID');
 
 export class UID extends Uint8Array {
   static override from(bytes: Uint8Array) {
     return new UID(
-      bytes.buffer as ArrayBuffer,
+      bytes.buffer,
       bytes.byteOffset,
       bytes.byteLength
     );
   }
 
-  constructor(buffer: ArrayBuffer, byteOffset?: number, length?: number) {
+  constructor(buffer: ArrayBufferLike, byteOffset?: number, length?: number) {
     super(buffer, byteOffset, length);
 
     Object.defineProperty(this, UID_BRAND, {
@@ -27,9 +29,7 @@ export class UID extends Uint8Array {
   }
 
   override toHex() {
-    return Array.from(this)
-      .map(b => b.toString(16).padStart(2, '0'))
-      .join('');
+    return toHex(this);
   }
 
   [Symbol.for('nodejs.util.inspect.custom')]() {

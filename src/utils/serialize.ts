@@ -1,16 +1,27 @@
-import { PlistDate } from '../classes/plist-date.js';
-import { UID } from '../classes/uid.js';
-import { Utf16String } from '../classes/utf16-string.js';
+import { PlistDate } from "../classes/plist-date.js";
+import { UID } from "../classes/uid.js";
+import { Utf16String } from "../classes/utf16-string.js";
+import {
+  concatBytes,
+  copyBytes,
+  encodeLatin1,
+  encodeUtf16BE,
+  encodeUtf8,
+  fromHex,
+  isByteSource,
+  toUint8Array,
+  writeFloat64BE,
+} from "./bytes.js";
 
 export function serializeBplist(dicts: unknown) {
-  var buffer = new WritableStreamBuffer();
-  buffer.write(Buffer.from("bplist00"));
+  const buffer = new WritableStreamBuffer();
+  buffer.write(encodeUtf8("bplist00"));
 
-  var entries = toEntries(dicts);
-  var idSizeInBytes = computeIdSizeInBytes(entries.length);
-  var offsets: number[] = [];
-  var offsetSizeInBytes: number;
-  var offsetTableOffset: number;
+  let entries = toEntries(dicts);
+  const idSizeInBytes = computeIdSizeInBytes(entries.length);
+  const offsets: number[] = [];
+  let offsetSizeInBytes: number;
+  let offsetTableOffset: number;
 
   updateEntryIds();
 
@@ -28,15 +39,15 @@ export function serializeBplist(dicts: unknown) {
   return buffer.getContents();
 
   function updateEntryIds() {
-    var strings: Record<string, any> = {};
-    var entryId = 0;
+    const strings: Record<string, any> = {};
+    let entryId = 0;
     entries.forEach(function(entry) {
       if (entry.id) {
         return;
       }
-      if (entry.type === 'string') {
+      if (entry.type === "string") {
         if (!entry.bplistOverride && strings.hasOwnProperty(entry.value)) {
-          entry.type = 'stringref';
+          entry.type = "stringref";
           entry.id = strings[entry.value];
         } else {
           strings[entry.value] = entry.id = entryId++;
@@ -47,27 +58,16 @@ export function serializeBplist(dicts: unknown) {
     });
 
     entries = entries.filter(function(entry) {
-      return (entry.type !== 'stringref');
+      return entry.type !== "stringref";
     });
   }
 
   function writeTrailer() {
-    // 6 null bytes
-    buffer.write(Buffer.from([0, 0, 0, 0, 0, 0]));
-
-    // size of an offset
+    buffer.write(new Uint8Array(6));
     writeByte(offsetSizeInBytes);
-
-    // size of a ref
     writeByte(idSizeInBytes);
-
-    // number of objects
     writeLong(entries.length);
-
-    // top object
     writeLong(0);
-
-    // offset table offset
     writeLong(offsetTableOffset);
   }
 
@@ -81,34 +81,34 @@ export function serializeBplist(dicts: unknown) {
 
   function write(entry: any) {
     switch (entry.type) {
-    case 'dict':
+    case "dict":
       writeDict(entry);
       break;
-    case 'number':
-    case 'double':
+    case "number":
+    case "double":
       writeNumber(entry);
       break;
-    case 'UID':
+    case "UID":
       writeUID(entry);
       break;
-    case 'array':
+    case "array":
       writeArray(entry);
       break;
-    case 'boolean':
+    case "boolean":
       writeBoolean(entry);
       break;
-    case 'string':
-    case 'string-utf16':
+    case "string":
+    case "string-utf16":
       writeString(entry);
       break;
-    case 'date':
+    case "date":
       writeDate(entry);
       break;
-    case 'data':
+    case "data":
       writeData(entry);
       break;
-    case 'null':
-      writeNull()
+    case "null":
+      writeNull();
       break;
     default:
       throw new Error("unhandled entry type: " + entry.type);
@@ -117,31 +117,27 @@ export function serializeBplist(dicts: unknown) {
 
   function writeDate(entry: any) {
     writeByte(0x33);
-
-    const raw = PlistDate.from(entry.value).toBuffer();
-    buffer.write(raw);
+    buffer.write(PlistDate.from(entry.value).toBytes());
   }
 
   function writeDict(entry: any) {
     writeIntHeader(0xD, entry.entryKeys.length);
-    entry.entryKeys.forEach(function(entry: any) {
-      writeID(entry.id);
+    entry.entryKeys.forEach(function(item: any) {
+      writeID(item.id);
     });
-    entry.entryValues.forEach(function(entry: any) {
-      writeID(entry.id);
+    entry.entryValues.forEach(function(item: any) {
+      writeID(item.id);
     });
   }
 
   function writeNumber(entry: any) {
-    if (typeof entry.value === 'bigint') {
+    if (typeof entry.value === "bigint") {
       const size = getIntSize(entry.value);
       const header = 0x10 | Math.log2(size);
 
       writeByte(header);
-
-      const buf = bigintToBuffer(entry.value, size);
-      buffer.write(buf);
-    } else if (entry.type !== 'double' && parseFloat(entry.value).toFixed() == entry.value) {
+      buffer.write(bigintToBuffer(entry.value, size));
+    } else if (entry.type !== "double" && parseFloat(entry.value).toFixed() == entry.value) {
       if (entry.value < 0) {
         writeByte(0x13);
         writeBytes(entry.value, 8, true);
@@ -165,14 +161,10 @@ export function serializeBplist(dicts: unknown) {
   }
 
   function writeUID(entry: any) {
-    let raw: Buffer;
+    let raw: Uint8Array;
 
     if (entry.value instanceof UID) {
-      raw = Buffer.from(
-        entry.value.buffer,
-        entry.value.byteOffset,
-        entry.value.byteLength,
-      );
+      raw = copyBytes(entry.value);
     } else if (typeof entry.value === "bigint") {
       if (entry.value < 0n) {
         throw new TypeError("UID must be unsigned");
@@ -180,21 +172,20 @@ export function serializeBplist(dicts: unknown) {
 
       let hex = entry.value.toString(16);
       if (hex.length % 2 !== 0) hex = "0" + hex;
-      raw = hex.length === 0 ? Buffer.from([0]) : Buffer.from(hex || "00", "hex");
+      raw = fromHex(hex || "00");
     } else if (
       typeof entry.value === "number" &&
       Number.isInteger(entry.value) &&
       entry.value >= 0
     ) {
-      let n = BigInt(entry.value);
+      const n = BigInt(entry.value);
       let hex = n.toString(16);
       if (hex.length % 2 !== 0) hex = "0" + hex;
-      raw = Buffer.from(hex || "00", "hex");
+      raw = fromHex(hex || "00");
     } else {
       throw new TypeError("UID value must be a UID, bigint, or unsigned integer number");
     }
 
-    // Canonical: strip leading zero bytes, but keep at least one byte.
     let start = 0;
     while (start < raw.length - 1 && raw[start] === 0) start++;
     raw = raw.subarray(start);
@@ -209,8 +200,8 @@ export function serializeBplist(dicts: unknown) {
 
   function writeArray(entry: any) {
     writeIntHeader(0xA, entry.entries.length);
-    entry.entries.forEach(function(e: any) {
-      writeID(e.id);
+    entry.entries.forEach(function(item: any) {
+      writeID(item.id);
     });
   }
 
@@ -222,33 +213,16 @@ export function serializeBplist(dicts: unknown) {
     writeByte(0x00);
   }
 
-
   function writeString(entry: any) {
-    if (entry.type === 'string-utf16') {
-      let utf16: Buffer;
-
-      if (Utf16String.isUtf16String(entry.value)) {
-        // ✅ USE RAW BYTES DIRECTLY
-        utf16 = Buffer.from(
-          entry.value.buffer,
-          entry.value.byteOffset,
-          entry.value.byteLength
-        );
-      } else {
-        // string → UTF-16LE → convert to BE
-        const le = Buffer.from(entry.value, 'ucs2');
-        utf16 = Buffer.alloc(le.length);
-
-        for (let i = 0; i < le.length; i += 2) {
-          utf16[i] = le[i + 1]!;
-          utf16[i + 1] = le[i]!;
-        }
-      }
+    if (entry.type === "string-utf16") {
+      const utf16 = Utf16String.isUtf16String(entry.value)
+        ? copyBytes(entry.value)
+        : encodeUtf16BE(entry.value);
 
       writeIntHeader(0x6, utf16.length / 2);
       buffer.write(utf16);
     } else {
-      const ascii = Buffer.from(entry.value, 'latin1');
+      const ascii = encodeLatin1(entry.value);
       writeIntHeader(0x5, ascii.length);
       buffer.write(ascii);
     }
@@ -264,13 +238,11 @@ export function serializeBplist(dicts: unknown) {
   }
 
   function writeByte(b: number) {
-    buffer.write(Buffer.from([b]));
+    buffer.write(b);
   }
 
   function writeDouble(v: number) {
-    var buf = Buffer.alloc(8);
-    buf.writeDoubleBE(v, 0);
-    buffer.write(buf);
+    buffer.write(writeFloat64BE(v));
   }
 
   function writeIntHeader(kind: number, value: number) {
@@ -295,109 +267,108 @@ export function serializeBplist(dicts: unknown) {
     writeBytes(id, idSizeInBytes);
   }
 
-  function writeBytes(value: number, bytes: number, is_signedint = false) {
-    // write low-order bytes big-endian style
-    var buf = Buffer.alloc(bytes);
-    var z = 0;
+  function writeBytes(value: number, bytes: number, isSignedInt = false) {
+    const buf = new Uint8Array(bytes);
+    let z = 0;
 
-    // javascript doesn't handle large numbers
     while (bytes > 4) {
-      buf[z++] = is_signedint ? 0xff : 0;
+      buf[z++] = isSignedInt ? 0xff : 0;
       bytes--;
     }
 
-    for (var i = bytes - 1; i >= 0; i--) {
+    for (let i = bytes - 1; i >= 0; i--) {
       buf[z++] = value >> (8 * i);
     }
+
     buffer.write(buf);
   }
-};
+}
 
 function toEntries(dicts: any) {
   if (dicts === null) {
     return [
       {
-        type: 'null',
-        value: null
-      }
+        type: "null",
+        value: null,
+      },
     ];
-  } else if (typeof dicts === 'boolean') {
+  } else if (typeof dicts === "boolean") {
     return [
       {
-        type: 'boolean',
-        value: dicts
-      }
+        type: "boolean",
+        value: dicts,
+      },
     ];
-  } else if (typeof dicts === 'bigint') {
+  } else if (typeof dicts === "bigint") {
     return [
       {
-        type: 'number',
-        value: dicts
-      }
+        type: "number",
+        value: dicts,
+      },
     ];
-  } else if (typeof dicts === 'number') {
+  } else if (typeof dicts === "number") {
     return [
       {
-        type: 'double',
-        value: dicts
-      }
+        type: "double",
+        value: dicts,
+      },
     ];
-  } else if (typeof dicts === 'string') {
+  } else if (typeof dicts === "string") {
     return [
       {
-        type: mustBeUtf16(dicts) ? 'string-utf16' : 'string',
-        value: dicts
-      }
+        type: mustBeUtf16(dicts) ? "string-utf16" : "string",
+        value: dicts,
+      },
     ];
   } else if (Utf16String.isUtf16String(dicts)) {
     return [
       {
-        type: 'string-utf16',
-        value: dicts
-      }
-    ]
+        type: "string-utf16",
+        value: dicts,
+      },
+    ];
   } else if (UID.isUID(dicts)) {
     return [
       {
-        type: 'UID',
-        value: dicts
-      }
-    ]
-  } else if (Buffer.isBuffer((dicts))) {
+        type: "UID",
+        value: dicts,
+      },
+    ];
+  } else if (isByteSource(dicts)) {
     return [
       {
-        type: 'data',
-        value: dicts
-      }
+        type: "data",
+        value: copyBytes(toUint8Array(dicts)),
+      },
     ];
   } else if (
     PlistDate.isPlistDate(dicts) ||
-    Object.prototype.toString.call(dicts) === '[object Date]'
+    Object.prototype.toString.call(dicts) === "[object Date]"
   ) {
     return [
       {
-        type: 'date',
-        value: dicts
-      }
-    ]
+        type: "date",
+        value: dicts,
+      },
+    ];
   } else if (Array.isArray(dicts)) {
     return toEntriesArray(dicts);
   } else if (isPlainObject(dicts)) {
     return toEntriesObject(dicts);
   } else {
-    throw new Error('unhandled entry: ' + dicts);
+    throw new Error("unhandled entry: " + dicts);
   }
 }
 
 function toEntriesArray(arr: unknown[]) {
-  var results = [
+  let results = [
     {
-      type: 'array',
-      entries: [] as unknown[]
-    }
+      type: "array",
+      entries: [] as unknown[],
+    },
   ];
   arr.forEach(function(v) {
-    var entry = toEntries(v);
+    const entry = toEntries(v);
     results[0]!.entries.push(entry[0]);
     results = results.concat(entry);
   });
@@ -406,7 +377,7 @@ function toEntriesArray(arr: unknown[]) {
 
 function toEntriesObject(dict: Record<string, unknown>) {
   const result = {
-    type: 'dict',
+    type: "dict",
     entryKeys: [] as unknown[],
     entryValues: [] as unknown[],
   };
@@ -453,7 +424,7 @@ function computeIdSizeInBytes(numberOfIds: number) {
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
-  if (Object.prototype.toString.call(value) !== '[object Object]') {
+  if (Object.prototype.toString.call(value) !== "[object Object]") {
     return false;
   }
 
@@ -462,7 +433,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 class WritableStreamBuffer {
-  _chunks: Buffer[];
+  _chunks: Uint8Array[];
   _size: number;
 
   constructor() {
@@ -471,19 +442,19 @@ class WritableStreamBuffer {
   }
 
   write(chunk: unknown, encoding?: any) {
-    let buf;
+    let buf: Uint8Array;
 
-    if (typeof chunk === 'number') {
-      buf = Buffer.from([chunk & 0xff]);
-    } else if (Buffer.isBuffer(chunk)) {
-      // copy to mirror stream-buffers behavior more closely
-      buf = Buffer.from(chunk);
-    } else if (chunk instanceof Uint8Array) {
-      buf = Buffer.from(chunk);
-    } else if (typeof chunk === 'string') {
-      buf = Buffer.from(chunk, encoding);
+    if (typeof chunk === "number") {
+      buf = Uint8Array.of(chunk & 0xff);
+    } else if (isByteSource(chunk)) {
+      buf = copyBytes(chunk);
+    } else if (typeof chunk === "string") {
+      if (encoding && encoding !== "utf8") {
+        throw new TypeError(`Unsupported string encoding passed to write(): ${String(encoding)}`);
+      }
+      buf = encodeUtf8(chunk);
     } else {
-      throw new TypeError('Unsupported chunk type passed to write()');
+      throw new TypeError("Unsupported chunk type passed to write()");
     }
 
     this._chunks.push(buf);
@@ -496,17 +467,15 @@ class WritableStreamBuffer {
   }
 
   getContents() {
-    return Buffer.concat(this._chunks, this._size);
+    return concatBytes(this._chunks, this._size);
   }
 }
 
-
-function bigintToBuffer(value: bigint, size: number): Buffer {
-  const buf = Buffer.alloc(size);
+function bigintToBuffer(value: bigint, size: number): Uint8Array {
+  const buf = new Uint8Array(size);
 
   let temp = value;
 
-  // handle negative via two's complement
   if (value < 0) {
     temp = (1n << BigInt(size * 8)) + value;
   }
@@ -518,7 +487,6 @@ function bigintToBuffer(value: bigint, size: number): Buffer {
 
   return buf;
 }
-
 
 function getIntSize(value: bigint): number {
   if (value >= -0x80n && value <= 0x7fn) return 1;

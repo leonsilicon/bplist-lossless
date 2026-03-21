@@ -1,6 +1,16 @@
+import {
+  bytesEqual,
+  copyBytes,
+  fromHex,
+  readFloat64BE,
+  toBase64,
+  toHex,
+  writeFloat64BE,
+} from "../utils/bytes.js";
+
 const APPLE_PLIST_EPOCH_MS = Date.UTC(2001, 0, 1);
 
-export type PlistDateBinaryInput = Buffer | Uint8Array | ArrayBuffer;
+export type PlistDateBinaryInput = Uint8Array | ArrayBuffer | ArrayBufferView;
 export type PlistDateInput =
   | PlistDate
   | Date
@@ -8,25 +18,20 @@ export type PlistDateInput =
   | PlistDateBinaryInput;
 
 type PlistCanonicalState = {
-  raw: Buffer;
+  raw: Uint8Array;
   plistSeconds: number;
   unixMilliseconds: number;
 };
 
 function isBinaryInput(value: unknown): value is PlistDateBinaryInput {
   return (
-    Buffer.isBuffer(value) ||
-    value instanceof Uint8Array ||
-    value instanceof ArrayBuffer
+    value instanceof ArrayBuffer ||
+    ArrayBuffer.isView(value)
   );
 }
 
-function normalizeRaw8(input: PlistDateBinaryInput): Buffer {
-  const raw = Buffer.isBuffer(input)
-    ? Buffer.from(input)
-    : input instanceof Uint8Array
-      ? Buffer.from(input)
-      : Buffer.from(new Uint8Array(input));
+function normalizeRaw8(input: PlistDateBinaryInput): Uint8Array {
+  const raw = copyBytes(input);
 
   if (raw.length !== 8) {
     throw new RangeError(
@@ -37,14 +42,12 @@ function normalizeRaw8(input: PlistDateBinaryInput): Buffer {
   return raw;
 }
 
-function encodePlistSeconds(seconds: number): Buffer {
-  const raw = Buffer.allocUnsafe(8);
-  raw.writeDoubleBE(seconds, 0);
-  return raw;
+function encodePlistSeconds(seconds: number): Uint8Array {
+  return writeFloat64BE(seconds);
 }
 
-function decodePlistSeconds(raw: Buffer): number {
-  return raw.readDoubleBE(0);
+function decodePlistSeconds(raw: Uint8Array): number {
+  return readFloat64BE(raw);
 }
 
 function plistSecondsToUnixMilliseconds(seconds: number): number {
@@ -151,6 +154,10 @@ export class PlistDate extends Date {
     return new PlistDate(input);
   }
 
+  static fromBytes(input: PlistDateBinaryInput): PlistDate {
+    return new PlistDate(input);
+  }
+
   static fromPlistSeconds(seconds: number): PlistDate {
     return new PlistDate(encodePlistSeconds(seconds));
   }
@@ -164,7 +171,7 @@ export class PlistDate extends Date {
   }
 
   #applyCanonicalState(state: PlistCanonicalState): void {
-    this.#raw = Buffer.from(state.raw);
+    this.#raw = copyBytes(state.raw);
 
     // Native Date only keeps whole-millisecond precision internally.
     // We still keep the exact plist value in #raw and expose it through
@@ -213,12 +220,16 @@ export class PlistDate extends Date {
    * If the object was constructed from raw bytes, those bytes are preserved
    * until the date is mutated.
    */
-  getRawBytes(): Buffer {
-    return Buffer.from(this.#raw);
+  getRawBytes(): Uint8Array {
+    return copyBytes(this.#raw);
   }
 
-  toRawString(encoding: BufferEncoding = "hex"): string {
-    return this.#raw.toString(encoding);
+  toRawString(encoding: "hex" | "base64" = "hex"): string {
+    if (encoding === "hex") {
+      return toHex(this.#raw);
+    }
+
+    return toBase64(this.#raw);
   }
 
   getRawHex(): string {
@@ -233,8 +244,12 @@ export class PlistDate extends Date {
     return this.getPlistSecondsString();
   }
 
-  toBuffer(): Buffer {
+  toBytes(): Uint8Array {
     return this.getRawBytes();
+  }
+
+  toBuffer(): Uint8Array {
+    return this.toBytes();
   }
 
   /**
@@ -269,7 +284,7 @@ export class PlistDate extends Date {
       );
     }
 
-    return this.setRawBytes(Buffer.from(hex, "hex"));
+    return this.setRawBytes(fromHex(hex));
   }
 
   /**
@@ -305,7 +320,7 @@ export class PlistDate extends Date {
 
   equalsExactly(other: PlistDateInput): boolean {
     const rhs = PlistDate.from(other);
-    return this.#raw.equals(rhs.#raw);
+    return bytesEqual(this.#raw, rhs.#raw);
   }
 
   equalsValue(other: PlistDateInput): boolean {

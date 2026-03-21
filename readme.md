@@ -2,7 +2,7 @@
 
 > Lossless binary plist parser and serializer for Node.js.
 
-`bplist-lossless` is adapted from [bplist-parser](https://github.com/joeferner/node-bplist-parser) and [bplist-creator](https://github.com/joeferner/node-bplist-creator), but with one goal: preserve binary plist values closely enough that round-tripping stays exact.
+`bplist-lossless` is adapted from [bplist-parser](https://github.com/joeferner/node-bplist-parser) and [bplist-creator](https://github.com/joeferner/node-bplist-creator), but designed to preserve binary plist values so parsing and then deserializing stays exact:
 
 ```js
 import { serializeBplist, parseBplist } from 'bplist-lossless';
@@ -12,7 +12,20 @@ expect(serializeBplist(parseBplist(buf))).toStrictEqual(buf);
 //=> true
 ```
 
-This is useful when you need to inspect or modify a binary plist without collapsing plist-specific values into lossy JavaScript types.
+It does this by using the following mappings between plist values and JavaScript values:
+| Plist Type | JavaScript Type |
+| --- | --- |
+| Real | `number` |
+| Integer | `bigint` |
+| Boolean | `boolean` |
+| UID | exported class `UID` (`extends Uint8Array`) |
+| UTF-8 String | `string` |
+| UTF-16 String | exported class `Utf16String` (`extends Uint8Array`) |
+| Date | exported class `PlistDate` (`extends Date`) |
+| Data | `Uint8Array` |
+| Array | `Array` |
+| Dictionary | object with `null` prototype |
+| Null | `null` |
 
 ## Install
 
@@ -31,7 +44,6 @@ import {
 } from 'bplist-lossless';
 
 const value = {
-	id: UID.from(Buffer.from('2a', 'hex')),
 	count: 42n,
 	name: 'Example',
 	// You can use a regular date if you don't care about microsecond precision
