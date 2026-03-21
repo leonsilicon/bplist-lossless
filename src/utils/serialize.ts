@@ -13,7 +13,7 @@ import {
   writeFloat64BE,
 } from "./bytes.js";
 
-export function serializeBplist(dicts: unknown) {
+export function serializeBplist(dicts: unknown): Uint8Array {
   const buffer = new WritableStreamBuffer();
   buffer.write(encodeUtf8("bplist00"));
 

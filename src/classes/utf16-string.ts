@@ -5,13 +5,13 @@ const UTF16_STRING_BRAND = Symbol.for('plist.Utf16String');
 export class Utf16String extends Uint8Array {
   static override from(bytes: Uint8Array): Utf16String {
     return new Utf16String(
-      bytes.buffer,
+      bytes.buffer as ArrayBuffer,
       bytes.byteOffset,
       bytes.byteLength
     );
   }
 
-  constructor(buffer: ArrayBufferLike, byteOffset?: number, length?: number) {
+  constructor(buffer: ArrayBuffer, byteOffset?: number, length?: number) {
     super(buffer, byteOffset, length);
 
     Object.defineProperty(this, UTF16_STRING_BRAND, {

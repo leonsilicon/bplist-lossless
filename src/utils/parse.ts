@@ -1,8 +1,8 @@
+import type { ByteSource } from "./bytes.js";
 import { PlistDate } from "../classes/plist-date.js";
 import { UID } from "../classes/uid.js";
 import { Utf16String } from "../classes/utf16-string.js";
 import {
-  ByteSource,
   decodeUtf8,
   readFloat32BE,
   readFloat64BE,
@@ -120,7 +120,7 @@ export function parseBplist(input: ByteSource) {
       const length = objInfo + 1;
       if (length < maxObjectSize) {
         return new UID(
-          buffer.buffer,
+          buffer.buffer as ArrayBuffer,
           buffer.byteOffset + offset + 1,
           length,
         );

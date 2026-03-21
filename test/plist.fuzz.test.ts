@@ -16,8 +16,22 @@ function createSafeObject(): Record<string, unknown> {
   return Object.create(null);
 }
 
-function asBytes(value: Uint8Array): Buffer {
-  return Buffer.from(value.buffer, value.byteOffset, value.byteLength);
+function asBytes(value: Uint8Array): Uint8Array {
+  return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+}
+
+function hexToBytes(hex: string): Uint8Array {
+  const out = new Uint8Array(hex.length / 2);
+
+  for (let i = 0; i < hex.length; i += 2) {
+    out[i / 2] = Number.parseInt(hex.slice(i, i + 2), 16);
+  }
+
+  return out;
+}
+
+function bytesToHex(value: Uint8Array): string {
+  return Array.from(value, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 function stableNumberString(value: number): string {
@@ -33,12 +47,12 @@ function asciiFrom(xs: readonly number[]): string {
 }
 
 function toUtf16String(text: string): Utf16String {
-  const le = Buffer.from(text, "utf16le");
-  const be = Buffer.allocUnsafe(le.length);
+  const be = new Uint8Array(text.length * 2);
 
-  for (let i = 0; i < le.length; i += 2) {
-    be[i] = le[i + 1]!;
-    be[i + 1] = le[i]!;
+  for (let i = 0; i < text.length; i++) {
+    const codeUnit = text.charCodeAt(i);
+    be[i * 2] = codeUnit >>> 8;
+    be[i * 2 + 1] = codeUnit & 0xff;
   }
 
   return Utf16String.from(be);
@@ -53,8 +67,7 @@ function encodeUid(value: bigint): UID {
   if (hex.length % 2 !== 0) hex = `0${hex}`;
   if (hex.length === 0) hex = "00";
 
-  const raw = Buffer.from(hex, "hex");
-  const minimal = raw.length === 0 ? Buffer.from([0]) : raw;
+  const minimal = hex.length === 0 ? Uint8Array.of(0) : hexToBytes(hex);
 
   if (minimal.length > 16) {
     throw new RangeError("UID too large for binary plist");
@@ -67,17 +80,9 @@ function encodeUid(value: bigint): UID {
   );
 }
 
-/**
- * Semantic normalizer for comparisons:
- * - Date and PlistDate compare by timestamp
- * - Buffer / Uint8Array compare by bytes
- * - UID compares by bytes
- * - Utf16String compares by text
- * - null-prototype object and normal object compare the same by keys/values
- */
 function normalizePlist(value: unknown): unknown {
   if (value instanceof UID) {
-    return { $uidHex: asBytes(value).toString("hex") };
+    return { $uidHex: bytesToHex(asBytes(value)) };
   }
 
   if (value instanceof Date) {
@@ -89,12 +94,8 @@ function normalizePlist(value: unknown): unknown {
     return value.toString();
   }
 
-  if (Buffer.isBuffer(value)) {
-    return { $dataHex: value.toString("hex") };
-  }
-
   if (value instanceof Uint8Array) {
-    return { $dataHex: asBytes(value).toString("hex") };
+    return { $dataHex: bytesToHex(asBytes(value)) };
   }
 
   if (typeof value === "bigint") {
@@ -140,14 +141,10 @@ function expectRoundTrip(input: unknown) {
   expectPlistSemanticsEqual(output, input);
 }
 
-// ---- Apple-valid semantic plist domain ----
-
-// plain ASCII strings
 const asciiStringArb = fc
   .array(fc.integer({ min: 0x00, max: 0x7f }), { maxLength: 24 })
   .map(asciiFrom);
 
-// definitely non-ASCII strings to exercise UTF-16 paths too
 const nonAsciiStringArb = fc
   .tuple(
     fc.array(fc.integer({ min: 0x00, max: 0x7f }), { maxLength: 8 }),
@@ -182,7 +179,6 @@ const plistIntegerArb = fc.oneof(
   signedIntArb(16),
 );
 
-// values that are definitely "real", not integers
 const plistRealArb = fc
   .double({ noNaN: true })
   .filter((n) => !Number.isInteger(n) || Object.is(n, -0));
@@ -192,9 +188,7 @@ const plistDateArb = fc.oneof(
   fc.date().map((d) => PlistDate.fromUnixMilliseconds(d.getTime())),
 );
 
-const plistDataArb = fc
-  .uint8Array({ maxLength: 32 })
-  .map((xs) => Buffer.from(xs));
+const plistDataArb = fc.uint8Array({ maxLength: 32 });
 
 const plistUidArb = fc
   .bigInt({ min: 0n, max: (1n << 128n) - 1n })
@@ -206,6 +200,7 @@ const plistValueArb: fc.Arbitrary<unknown> = fc.letrec((tie) => ({
   leaf: fc.oneof(
     { withCrossShrink: true },
     fc.boolean(),
+    fc.constant(null),
     plistIntegerArb,
     plistRealArb,
     plistStringArb,
@@ -237,7 +232,6 @@ const plistValueArb: fc.Arbitrary<unknown> = fc.letrec((tie) => ({
   ),
 })).value;
 
-// Use @fast-check/vitest here
 propTest.prop([plistValueArb], {
   numRuns: FC_RUNS,
   seed: FC_SEED,
@@ -249,6 +243,14 @@ propTest.prop([plistValueArb], {
 });
 
 describe("edge cases", () => {
+  test("UID.fromNumber creates canonical UID bytes", () => {
+    expect(UID.fromNumber(0).toHex()).toBe("00");
+    expect(UID.fromNumber(42).toHex()).toBe("2a");
+    expect(UID.fromNumber(256).toHex()).toBe("0100");
+    expect(() => UID.fromNumber(-1)).toThrow(TypeError);
+    expect(() => UID.fromNumber(1.5)).toThrow(TypeError);
+  });
+
   test("empty arrays", () => {
     expectRoundTrip([]);
     expectRoundTrip([[]]);
@@ -286,12 +288,8 @@ describe("edge cases", () => {
     expectRoundTrip(encodeUid(0n));
     expectRoundTrip(encodeUid((1n << 128n) - 1n));
   });
-});
 
-// Keep this only if your serializer/parser intentionally supports null.
-// null is not a normal Apple property-list semantic value.
-describe("serializer extensions", () => {
-  test("null round-trips if you support it", () => {
+  test("null", () => {
     const output = parse(serialize(null));
     expect(output).toBeNull();
   });
