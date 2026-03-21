@@ -5,7 +5,7 @@
 `bplist-lossless` is adapted from [bplist-parser](https://github.com/joeferner/node-bplist-parser) and [bplist-creator](https://github.com/joeferner/node-bplist-creator), but with one goal: preserve binary plist values closely enough that round-tripping stays exact.
 
 ```js
-import { serializeBplist, parseBplist } from 'bplist-lossless'
+import { serializeBplist, parseBplist } from 'bplist-lossless';
 
 const buf = fs.readFileSync('./file.plist');
 expect(serializeBplist(parseBplist(buf))).toStrictEqual(buf);
