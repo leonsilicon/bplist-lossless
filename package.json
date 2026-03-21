@@ -6,13 +6,22 @@
   "license": "MIT",
   "module": "./dist/exports/main.js",
   "types": "./dist/exports/main.d.ts",
-  "keywords": [
+  ""keywords": [
     "bplist",
-    "bplist parser",
-    "binary plist",
     "plist",
-    "binary plist parser",
-    "bplist parser"
+    "binary-plist",
+    "plist-parser",
+    "bplist-parser",
+    "plist-serializer",
+    "bplist-serializer",
+    "plist-writer",
+    "apple-plist",
+    "ios-plist",
+    "macos-plist",
+    "binary-data",
+    "serialization",
+    "lossless",
+    "roundtrip",
   ],
   "repository": {
     "type": "git",
