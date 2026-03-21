@@ -1,0 +1,46 @@
+{
+  "name": "bplist-lossless",
+  "type": "module",
+  "version": "0.1.0",
+  "author": "Leon Si <leon@leonsilicon.com>",
+  "license": "MIT",
+  "module": "./dist/exports/main.js",
+  "types": "./dist/exports/main.d.ts",
+  "keywords": [
+    "bplist",
+    "bplist parser",
+    "binary plist",
+    "plist",
+    "binary plist parser",
+    "bplist parser"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/leonsilicon/bplist-lossless.git"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/exports/main.d.ts",
+      "default": "./dist/exports/main.js"
+    },
+    "./*": {
+      "types": "./dist/*.d.ts",
+      "default": "./dist/*.js"
+    }
+  },
+  "imports": {
+    "#/*": "./src/*"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@fast-check/vitest": "^0.3.0",
+    "fast-check": "^4.6.0",
+    "vitest": "^4.1.0"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}
