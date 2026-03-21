@@ -5,7 +5,10 @@
 `bplist-lossless` is adapted from `bplist-parser` and `bplist-creator`, but with one goal: preserve binary plist values closely enough that round-tripping stays exact.
 
 ```js
-serializeBplist(parseBplist(buffer)).equals(buffer);
+import { serializeBplist, parseBplist } from 'bplist-lossless'
+
+const buf = fs.readFileSync('./file.plist');
+expect(serializeBplist(parseBplist(buf))).toStrictEqual(buf);
 //=> true
 ```
 
@@ -31,6 +34,7 @@ const value = {
 	id: UID.from(Buffer.from('2a', 'hex')),
 	count: 42n,
 	name: 'Example',
+	// You can use a regular date if you don't care about microsecond precision
 	createdAt: PlistDate.fromUnixMilliseconds(1710000000123),
 	payload: Buffer.from('6869', 'hex'),
 };
