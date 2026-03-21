@@ -1,11 +1,14 @@
 {
   "name": "bplist-lossless",
   "type": "module",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "author": "Leon Si <leon@leonsilicon.com>",
   "license": "MIT",
   "module": "./dist/exports/main.js",
   "types": "./dist/exports/main.d.ts",
+  "files": [
+    "dist"
+  ],
   "keywords": [
     "bplist",
     "plist",
