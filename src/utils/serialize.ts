@@ -1,5 +1,3 @@
-// adapted from http://code.google.com/p/plist/source/browse/trunk/src/main/java/com/dd/plist/BinaryPropertyListWriter.java
-
 import { PlistDate } from '../classes/plist-date.js';
 import { UID } from '../classes/uid.js';
 import { Utf16String } from '../classes/utf16-string.js';

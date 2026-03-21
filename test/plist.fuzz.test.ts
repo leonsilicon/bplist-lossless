@@ -184,7 +184,7 @@ const plistIntegerArb = fc.oneof(
 
 // values that are definitely "real", not integers
 const plistRealArb = fc
-  .double({ noNaN: true, noInfinity: true })
+  .double({ noNaN: true })
   .filter((n) => !Number.isInteger(n) || Object.is(n, -0));
 
 const plistDateArb = fc.oneof(

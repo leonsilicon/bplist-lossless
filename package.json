@@ -6,7 +6,7 @@
   "license": "MIT",
   "module": "./dist/exports/main.js",
   "types": "./dist/exports/main.d.ts",
-  ""keywords": [
+  "keywords": [
     "bplist",
     "plist",
     "binary-plist",
@@ -21,7 +21,7 @@
     "binary-data",
     "serialization",
     "lossless",
-    "roundtrip",
+    "roundtrip"
   ],
   "repository": {
     "type": "git",
@@ -41,7 +41,7 @@
     "#/*": "./src/*"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "rm -rf dist && tsc",
     "test": "vitest run"
   },
   "devDependencies": {
