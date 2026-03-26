@@ -1,7 +1,7 @@
 {
   "name": "bplist-lossless",
   "type": "module",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "author": "Leon Si <leon@leonsilicon.com>",
   "license": "MIT",
   "module": "./dist/exports/main.js",
@@ -50,9 +50,7 @@
   "devDependencies": {
     "@fast-check/vitest": "^0.3.0",
     "fast-check": "^4.6.0",
+    "typescript": "^5",
     "vitest": "^4.1.0"
-  },
-  "peerDependencies": {
-    "typescript": "^5"
   }
 }
